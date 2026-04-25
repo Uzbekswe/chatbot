@@ -15,6 +15,8 @@ from tenacity import (
     wait_exponential,
 )
 
+from cost_estimator import SessionCostTracker, estimate
+
 # ── config ─────────────────────────────────────────────
 MODEL = "llama3.2:3b"
 BASE_URL = "http://localhost:11434/v1"
@@ -25,6 +27,7 @@ SYSTEM_PROMPT = "You are a helpful assistant. Be concise and clear."
 
 # ── setup ──────────────────────────────────────────────
 client = OpenAI(base_url=BASE_URL, api_key="ollama")
+cost_tracker = SessionCostTracker(MODEL)
 console = Console()
 messages = []
 session_stats = {"turns": 0, "total_tokens": 0}
@@ -124,12 +127,14 @@ def chat(user_input: str) -> None:
         session_stats["total_tokens"] = total
 
         if total:
+            turn_cost = cost_tracker.record(inp, out)
             console.print(
                 f"[dim]tokens → total: {total:,} | in: {inp:,} | out: {out:,}[/dim]"
             )
+            console.print(f"[dim]{turn_cost}[/dim]")
             render_token_bar(total)
         else:
-            console.print("[dim]tokens → (usage not returned by model)[/dim]")
+            console.print("[dim]tokens → (unavailable in stream mode)[/dim]")
             render_token_bar(session_stats["total_tokens"])
 
         if total >= TOKEN_WARN_THRESHOLD:
@@ -212,6 +217,7 @@ def cmd_reset() -> None:
     messages = []
     session_stats["turns"] = 0
     session_stats["total_tokens"] = 0
+    cost_tracker.reset()
     console.print("[bold red]History cleared.[/bold red] Starting fresh.\n")
 
 
@@ -254,6 +260,11 @@ def cmd_save() -> None:
     console.print(f"[bold green]Saved →[/bold green] {filepath}\n")
 
 
+def cmd_cost() -> None:
+    console.print(Panel(cost_tracker.summary(), title="Cost Summary", style="cyan"))
+    console.print()
+
+
 def show_help() -> None:
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="bold cyan")
@@ -262,6 +273,7 @@ def show_help() -> None:
         ("/reset", "Clear conversation history"),
         ("/history", "Show full conversation so far"),
         ("/save", "Export conversation to chats/"),
+        ("/cost", "Show session token cost summary"),
         ("/help", "Show this menu"),
         ("/quit", "Exit"),
     ]:
@@ -317,6 +329,8 @@ def main():
                 cmd_history()
             case "/save":
                 cmd_save()
+            case "/cost":
+                cmd_cost()
             case _:
                 chat(user_input)
 
