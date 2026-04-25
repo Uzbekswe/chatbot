@@ -1,0 +1,14 @@
+cat > .gitignore << 'EOF'
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Saved chats (personal conversation data)
+chats/
+
+# OS
+.DS_Store
+EOF
